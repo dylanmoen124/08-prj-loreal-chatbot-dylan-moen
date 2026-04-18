@@ -2,6 +2,7 @@
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
 const chatWindow = document.getElementById("chatWindow");
+const sendBtn = document.getElementById("sendBtn");
 
 // Model + system message settings for your chatbot behavior
 const MODEL = "gpt-4o";
@@ -19,8 +20,34 @@ function extractUserName(text) {
   return match ? match[1] : "";
 }
 
+// Prevent user text from being interpreted as HTML when displayed.
+function escapeHtml(text) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+// Adds one message bubble to the chat window.
+function appendMessage(role, text) {
+  const messageEl = document.createElement("div");
+  messageEl.className = `message-row ${role}`;
+
+  const bubbleEl = document.createElement("div");
+  bubbleEl.className = "message-bubble";
+  bubbleEl.innerHTML = escapeHtml(text).replaceAll("\n", "<br>");
+
+  messageEl.appendChild(bubbleEl);
+  chatWindow.appendChild(messageEl);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+
+  return messageEl;
+}
+
 // Set initial message
-chatWindow.textContent = "👋 Hello! How can I help you today?";
+appendMessage("assistant", "👋 Hello! How can I help you today?");
 
 /* Handle form submit */
 chatForm.addEventListener("submit", async (e) => {
@@ -46,7 +73,11 @@ chatForm.addEventListener("submit", async (e) => {
   // Cloudflare Worker URL
   const workerUrl = "https://lorbot.dylanmoen124.workers.dev/";
 
-  chatWindow.textContent = "Thinking...";
+  appendMessage("user", message);
+  const loadingMessageEl = appendMessage("assistant", "Thinking...");
+  userInput.value = "";
+  userInput.disabled = true;
+  sendBtn.disabled = true;
 
   let personalizedSystemMessage = SYSTEM_MESSAGE;
   if (userName) {
@@ -75,7 +106,8 @@ chatForm.addEventListener("submit", async (e) => {
     const assistantReply = data.choices?.[0]?.message?.content;
 
     if (assistantReply) {
-      chatWindow.textContent = assistantReply;
+      loadingMessageEl.remove();
+      appendMessage("assistant", assistantReply);
       conversationHistory.push({ role: "assistant", content: assistantReply });
 
       if (conversationHistory.length > MAX_CONTEXT_MESSAGES) {
@@ -85,14 +117,22 @@ chatForm.addEventListener("submit", async (e) => {
         );
       }
     } else {
-      chatWindow.textContent =
-        "No response text found. Check your Worker logs.";
+      loadingMessageEl.remove();
+      appendMessage(
+        "assistant",
+        "No response text found. Check your Worker logs.",
+      );
     }
   } catch (error) {
-    chatWindow.textContent =
-      "Error connecting to your Worker. Check URL/CORS and try again.";
+    loadingMessageEl.remove();
+    appendMessage(
+      "assistant",
+      "Error connecting to your Worker. Check URL/CORS and try again.",
+    );
     console.error("Worker request failed:", error);
+  } finally {
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    userInput.focus();
   }
-
-  userInput.value = "";
 });
